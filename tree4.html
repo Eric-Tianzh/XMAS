@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Sapphire & White Proton Tree</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; }
+        #info { 
+            position: absolute; top: 15px; width: 100%; text-align: center; 
+            color: #4da6ff; font-family: 'Segoe UI', sans-serif; pointer-events: none; 
+            z-index: 100; text-shadow: 0 0 10px #0052cc;
+			font-size: 32px;      /* 整体基础字体大小，直接影响 MERRY XMAS */
+			font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">MERRY XMAS<br><small style="opacity:0.6"></small></div>
+    
+    <script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, treeGroup, starPoints, ribbonPoints;
+        let rotY = 0, rotX = 0.2;
+        let isDown = false, px, py;
+
+        // 【关键】增强版发光贴图：让粒子看起来更大、更亮
+        function createGlowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            g.addColorStop(0, 'rgba(255,255,255,1)');    // 中心纯白
+            g.addColorStop(0.2, 'rgba(150,200,255,0.8)'); // 内圈淡蓝
+            g.addColorStop(0.5, 'rgba(30,80,200,0.3)');  // 外圈深蓝发光
+            g.addColorStop(1, 'rgba(0,0,0,0)');          // 边缘透明
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, 128, 128);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
+            camera.position.z = 230;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            treeGroup = new THREE.Group();
+            scene.add(treeGroup);
+
+            // 1. 星空背景
+            const sGeo = new THREE.BufferGeometry();
+            const sPos = [];
+            for(let i=0; i<3000; i++) sPos.push((Math.random()-0.5)*1800, (Math.random()-0.5)*1800, (Math.random()-0.5)*1800);
+            sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sPos, 3));
+            starPoints = new THREE.Points(sGeo, new THREE.PointsMaterial({color: 0xffffff, size: 0.8}));
+            scene.add(starPoints);
+
+            // 2. 蓝白交替质子树
+            const tGeo = new THREE.BufferGeometry();
+            const tPos = [], tCol = [];
+            const color = new THREE.Color();
+
+            for(let i=0; i<4000; i++) {
+                const y = Math.random() * 150 - 75;
+                const r = ((75 - y) / 150) * 65 + 1;
+                const a = Math.random() * Math.PI * 2;
+                tPos.push(Math.cos(a)*r, y, Math.sin(a)*r);
+                
+                // 【逻辑】70% 宝石蓝，30% 纯白色
+                if (Math.random() > 0.3) {
+                    color.setHSL(0.6, 0.9, 0.4 + Math.random() * 0.3); // 宝石蓝
+                } else {
+                    color.setRGB(0.9, 0.95, 1.0); // 极亮的冷白色
+                }
+                tCol.push(color.r, color.g, color.b);
+            }
+            tGeo.setAttribute('position', new THREE.Float32BufferAttribute(tPos, 3));
+            tGeo.setAttribute('color', new THREE.Float32BufferAttribute(tCol, 3));
+            
+            const treeMat = new THREE.PointsMaterial({
+                size: 6.0, // 【变大】原本是3.5
+                map: createGlowTexture(),
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                vertexColors: true
+            });
+            const treePoints = new THREE.Points(tGeo, treeMat);
+            treeGroup.add(treePoints);
+
+            // 3. 螺旋环绕带（白蓝混合）
+            const rGeo = new THREE.BufferGeometry();
+            const rPos = [];
+            for(let i=0; i<1000; i++) {
+                const t = i / 1000; 
+                const y = t * 150 - 75;
+                const angle = t * Math.PI * 2 * 3; 
+                const r = ((75 - y) / 150) * 68 +30; 
+                rPos.push(Math.cos(angle)*r, y, Math.sin(angle)*r);
+            }
+            rGeo.setAttribute('position', new THREE.Float32BufferAttribute(rPos, 3));
+            const ribbonMat = new THREE.PointsMaterial({
+                size: 6, color: 0xFFF68F, map: createGlowTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            ribbonPoints = new THREE.Points(rGeo, ribbonMat);
+            treeGroup.add(ribbonPoints);
+
+            // 4. 树顶五角星
+            const shape = new THREE.Shape();
+            for (let i = 0; i < 10; i++) {
+                const ra = i % 2 === 0 ? 7 : 3.5;
+                const ang = (i / 5) * Math.PI - Math.PI/2;
+                if (i === 0) shape.moveTo(Math.cos(ang) * ra, Math.sin(ang) * ra);
+                else shape.lineTo(Math.cos(ang) * ra, Math.sin(ang) * ra);
+            }
+            const starMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0xFFFFE0, side: THREE.DoubleSide }));
+            starMesh.position.y = 82;
+            treeGroup.add(starMesh);
+
+            // 交互
+            const handleStart = (x, y) => { isDown = true; px = x; py = y; };
+            const handleMove = (x, y) => { if(!isDown) return; rotY += (x - px) * 0.01; rotX += (y - py) * 0.01; px = x; py = y; };
+            window.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+            window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+            window.addEventListener('mouseup', () => isDown = false);
+            window.addEventListener('touchstart', e => handleStart(e.touches[0].clientX, e.touches[0].clientY));
+            window.addEventListener('touchmove', e => handleMove(e.touches[0].clientX, e.touches[0].clientY));
+            window.addEventListener('touchend', () => isDown = false);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            rotY += 0.007; 
+            treeGroup.rotation.y = rotY;
+            treeGroup.rotation.x = rotX;
+            starPoints.rotation.y += 0.0002;
+
+            // 螺旋带向上流动逻辑
+            const pos = ribbonPoints.geometry.attributes.position.array;
+            for(let i=0; i<pos.length; i+=3) {
+                pos[i+1] += 0.5;
+                if(pos[i+1] > 75) pos[i+1] = -75;
+                const t = (pos[i+1] + 75) / 150;
+                const angle = t * Math.PI * 2 * 3;
+                const r = ((75 - pos[i+1]) / 150) * 68 + 3;
+                pos[i] = Math.cos(angle) * r;
+                pos[i+2] = Math.sin(angle) * r;
+            }
+            ribbonPoints.geometry.attributes.position.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
