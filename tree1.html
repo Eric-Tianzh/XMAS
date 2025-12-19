@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Proton Tree with Star</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; }
+        #info { position: absolute; top: 15px; width: 100%; text-align: center; color: #2ecc71; font-family: sans-serif; pointer-events: none; z-index: 100; }
+    </style>
+</head>
+<body>
+    <div id="info">PROTON XMAS TREE<br>SWIPE TO ROTATE</div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, treePoints, starPoints, starMesh;
+        let rotY = 0, rotX = 0.2;
+
+        function createPTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(0.3, 'rgba(46,204,113,0.8)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // 绘制五角星形状
+        function createStarShape() {
+            const shape = new THREE.Shape();
+            const pts = 5;
+            const outerRadius = 5;
+            const innerRadius = 2.5;
+            for (let i = 0; i < pts * 2; i++) {
+                const r = i % 2 === 0 ? outerRadius : innerRadius;
+                const a = (i / pts) * Math.PI;
+                if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+                else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            }
+            return shape;
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
+            camera.position.z = 220;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // 1. 星空
+            const sGeo = new THREE.BufferGeometry();
+            const sPos = [];
+            for(let i=0; i<3000; i++) sPos.push((Math.random()-0.5)*1500, (Math.random()-0.5)*1500, (Math.random()-0.5)*1500);
+            sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sPos, 3));
+            starPoints = new THREE.Points(sGeo, new THREE.PointsMaterial({color: 0xffffff, size: 0.7}));
+            scene.add(starPoints);
+
+            // 2. 圣诞树
+            const tGeo = new THREE.BufferGeometry();
+            const tPos = [], tCol = [];
+            for(let i=0; i<4000; i++) {
+                const y = Math.random() * 140 - 70;
+                const r = ((70 - y) / 140) * 60 + 1;
+                const a = Math.random() * Math.PI * 2;
+                tPos.push(Math.cos(a)*r, y, Math.sin(a)*r);
+                const c = new THREE.Color();
+                c.setHSL(0.35, 0.9, 0.4 + Math.random()*0.2);
+                tCol.push(c.r, c.g, c.b);
+            }
+            tGeo.setAttribute('position', new THREE.Float32BufferAttribute(tPos, 3));
+            tGeo.setAttribute('color', new THREE.Float32BufferAttribute(tCol, 3));
+            
+            treePoints = new THREE.Points(tGeo, new THREE.PointsMaterial({
+                size: 3.5, map: createPTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true
+            }));
+            scene.add(treePoints);
+
+            // 3. 实心五角星
+            const starShape = createStarShape();
+            const starGeo = new THREE.ShapeGeometry(starShape);
+            const starMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
+            starMesh = new THREE.Mesh(starGeo, starMat);
+            starMesh.position.y = 75;
+            scene.add(starMesh);
+
+            // 交互逻辑
+            let isDown = false, px, py;
+            const down = (x,y) => { isDown = true; px = x; py = y; };
+            const move = (x,y) => {
+                if(!isDown) return;
+                rotY += (x - px) * 0.01;
+                rotX += (y - py) * 0.01;
+                px = x; py = y;
+            };
+            window.addEventListener('mousedown', e => down(e.clientX, e.clientY));
+            window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+            window.addEventListener('mouseup', () => isDown = false);
+            window.addEventListener('touchstart', e => down(e.touches[0].clientX, e.touches[0].clientY));
+            window.addEventListener('touchmove', e => move(e.touches[0].clientX, e.touches[0].clientY));
+            window.addEventListener('touchend', () => isDown = false);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            rotY += 0.01; // 自动旋转
+            
+            treePoints.rotation.y = rotY;
+            treePoints.rotation.x = rotX;
+            
+            // 五角星同步旋转并始终面向摄像机 (可选)
+            starMesh.rotation.y = rotY;
+            starMesh.rotation.x = rotX;
+            
+            starPoints.rotation.y += 0.0005;
+            renderer.render(scene, camera);
+        }
+
+        init();
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
